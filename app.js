@@ -12,7 +12,7 @@
   // Bump whenever anything under data/ changes: the versioned URL is a cache
   // miss for the service worker, so phones pick up new word data on first load
   // instead of serving yesterday's copy.
-  const DATA_V = "3";
+  const DATA_V = "4";
 
   const DEFAULT_SETTINGS = {
     newPerDay: 20,
