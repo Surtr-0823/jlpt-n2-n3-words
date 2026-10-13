@@ -1,5 +1,5 @@
 /* Offline shell cache. Bump CACHE when app files change. */
-const CACHE = "jlpt-n2n3-v3";
+const CACHE = "jlpt-n2n3-v4";
 const ASSETS = [
   "./",
   "./index.html",
@@ -33,16 +33,20 @@ self.addEventListener("fetch", (e) => {
   const url = new URL(req.url);
   if (url.origin !== location.origin) return;
 
-  // word data: cache-first (it is immutable per release)
+  // word data: stale-while-revalidate, so a released word bank shows up
+  // automatically on the next load without needing a hard refresh
   if (url.pathname.includes("/data/")) {
     e.respondWith(
-      caches.match(req).then((hit) =>
-        hit || fetch(req).then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put(req, copy));
+      caches.open(CACHE).then(async (cache) => {
+        const hit = await cache.match(req);
+        const fresh = fetch(req).then((res) => {
+          if (res && res.ok) cache.put(req, res.clone());
           return res;
-        })
-      )
+        }).catch(() => null);
+        if (hit) return hit;
+        const res = await fresh;
+        return res || new Response("", { status: 504 });
+      })
     );
     return;
   }

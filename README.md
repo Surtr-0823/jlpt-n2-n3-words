@@ -69,6 +69,12 @@ python -m http.server 8787 --directory site
 卡片状态由日志实时重算。因此多设备合并时只需求并集，
 不会出现「手机上背的记录被平板覆盖」这类问题。接入云端同步时不需要改动存储格式。
 
+> **改词库后记得改版本号**：`app.js` 里的 `DATA_V` 要 +1。
+> 手机上的 Service Worker 会按「缓存优先」提供 `data/words.json`，
+> 版本号一变，地址就变了，才会去网上重新拉。忘了改也不会永久卡住 ——
+> Service Worker 现在对 `data/` 用的是「先用缓存、后台刷新」，
+> 下一次打开就会自动更新。
+
 ## 部署到 GitHub Pages
 
 ```bash
