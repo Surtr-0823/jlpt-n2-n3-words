@@ -9,6 +9,10 @@
   const K_LOG = "jlpt.progress.v1";
   const K_SET = "jlpt.settings.v1";
   const K_PREVIEWED = "jlpt.previewed.v1";
+  // Bump whenever anything under data/ changes: the versioned URL is a cache
+  // miss for the service worker, so phones pick up new word data on first load
+  // instead of serving yesterday's copy.
+  const DATA_V = "3";
 
   const DEFAULT_SETTINGS = {
     newPerDay: 20,
@@ -835,8 +839,8 @@
     S.log = loadLog();
     try {
       const [w, m] = await Promise.all([
-        fetch("data/words.json").then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); }),
-        fetch("data/manifest.json").then((r) => r.json()),
+        fetch(`data/words.json?v=${DATA_V}`).then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); }),
+        fetch(`data/manifest.json?v=${DATA_V}`).then((r) => r.json()),
       ]);
       S.words = w.words;
       S.manifest = m;
