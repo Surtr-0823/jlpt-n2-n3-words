@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>N2 / N3 考点单词</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#1f2937">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="考点单词">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" href="icons/icon-180.png">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<div id="app">
+  <header class="topbar">
+    <div class="topbar-row">
+      <h1 id="viewTitle">学习</h1>
+      <div id="topStats" class="top-stats"></div>
+    </div>
+    <div id="duebar" class="duebar"></div>
+  </header>
+
+  <main id="main"></main>
+
+  <nav class="tabbar">
+    <button class="tab" data-view="study"><span class="ic">◎</span><span>学习</span></button>
+    <button class="tab" data-view="browse"><span class="ic">☰</span><span>词表</span></button>
+    <button class="tab" data-view="stats"><span class="ic">▤</span><span>进度</span></button>
+    <button class="tab" data-view="settings"><span class="ic">⚙</span><span>设置</span></button>
+  </nav>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
