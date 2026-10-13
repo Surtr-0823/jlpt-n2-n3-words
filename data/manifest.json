@@ -1,0 +1,34 @@
+{
+ "generated": "2026-10-13",
+ "count": 1410,
+ "levelCounts": {
+  "N2": 711,
+  "N3": 699
+ },
+ "banks": [
+  {
+   "id": "n2-kaodian",
+   "level": "N2",
+   "kind": "exam",
+   "title": "N2 考点单词 2010-2024"
+  },
+  {
+   "id": "n2-repeat",
+   "level": "N2",
+   "kind": "repeat",
+   "title": "N2 反复考察的单词"
+  },
+  {
+   "id": "n3-kaodian",
+   "level": "N3",
+   "kind": "exam",
+   "title": "N3 考点单词 2010-2025"
+  },
+  {
+   "id": "n3-gaopin",
+   "level": "N3",
+   "kind": "highfreq",
+   "title": "N3 高频重点词汇"
+  }
+ ]
+}
