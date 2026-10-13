@@ -8,6 +8,7 @@
   const MIN = 60000;
   const K_LOG = "jlpt.progress.v1";
   const K_SET = "jlpt.settings.v1";
+  const K_PREVIEWED = "jlpt.previewed.v1";
 
   const DEFAULT_SETTINGS = {
     newPerDay: 20,
@@ -15,6 +16,9 @@
     cardMode: "mix",       // ja2zh | zh2ja | cloze | mix
     showReading: "after",  // after | always | never
     levels: ["N2", "N3"],
+    preview: true,         // 学习今日新词前先预习一遍
+    planByDeadline: true,  // 按截止日期自动算每日新词
+    deadline: "2026-12-06",
   };
 
   const S = {
@@ -30,6 +34,8 @@
     flipped: false,
     session: { new: 0, review: 0 },
     filter: { level: "", bank: "", q: "" },
+    showPreview: false,
+    previewList: [],
   };
 
   /* ------------------------------------------------------------ storage */
@@ -96,6 +102,53 @@
   const keyOf = (w) => w.w + "\u0001" + w.r;
   const startOfToday = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); };
 
+  function todayStr() {
+    const d = new Date();
+    const p = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  }
+
+  function previewedToday() {
+    try { return localStorage.getItem(K_PREVIEWED) === todayStr(); } catch { return false; }
+  }
+
+  function markPreviewed() {
+    try { localStorage.setItem(K_PREVIEWED, todayStr()); } catch {}
+  }
+
+  /* ------------------------------------------------------------ plan */
+  function plan() {
+    const pool = activeWords();
+    const unseen = pool.filter((w) => !S.cards.has(keyOf(w))).length;
+    const dl = S.settings.deadline;
+    const out = { total: pool.length, unseen, deadline: dl, daysLeft: null, target: null };
+    if (dl) {
+      const end = new Date(dl + "T00:00:00");
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const daysLeft = Math.max(1, Math.round((end - today) / DAY));
+      out.daysLeft = daysLeft;
+      out.target = Math.max(1, Math.ceil(unseen / daysLeft));
+      out.end = end;
+    }
+    // recent pace: words introduced per day over the last 7 days
+    const t0 = startOfToday();
+    const firstSeen = new Map();
+    for (const ev of S.log) if (!firstSeen.has(ev[0])) firstSeen.set(ev[0], ev[2]);
+    let recent = 0;
+    for (const t of firstSeen.values()) if (t >= t0 - 6 * DAY) recent++;
+    out.pace = recent / 7;
+    out.etaDays = out.pace > 0 ? Math.ceil(unseen / out.pace) : null;
+    return out;
+  }
+
+  function effectiveNewPerDay() {
+    if (S.settings.planByDeadline && S.settings.deadline) {
+      const p = plan();
+      if (p.target) return p.target;
+    }
+    return S.settings.newPerDay;
+  }
+
   function introducedToday() {
     const t0 = startOfToday();
     const first = new Map();
@@ -143,12 +196,16 @@
       else if (c.due <= now) due.push({ w, c });
     }
     due.sort((a, b) => a.c.due - b.c.due);
-    const room = Math.max(0, S.settings.newPerDay - introducedToday());
+    const room = Math.max(0, effectiveNewPerDay() - introducedToday());
     // brand-new cards stay in dataset order so the list reads like the PDF
     return [
       ...due.slice(0, S.settings.maxReview).map((x) => x.w),
       ...fresh.slice(0, room),
     ];
+  }
+
+  function newInQueue() {
+    return S.queue.filter((w) => !S.cards.has(keyOf(w)));
   }
 
   function requeueSoon(word, ts) {
@@ -226,17 +283,89 @@
       if (!c) unseen++;
       else if (c.due <= now) due++;
     }
-    const room = Math.max(0, S.settings.newPerDay - introducedToday());
+    const room = Math.max(0, effectiveNewPerDay() - introducedToday());
     byId("topStats").innerHTML =
       `待复习 <b>${due}</b> · 新词 <b>${Math.min(unseen, room)}</b> · 今日 <b>${reviewedToday()}</b>`;
     const total = due + Math.min(unseen, room);
     const done = S.session.new + S.session.review;
     const pct = total + done === 0 ? 100 : Math.round((done / (total + done)) * 100);
     byId("duebar").innerHTML = `<i style="width:${pct}%"></i>`;
+    renderPlanStrip();
+  }
+
+  const fmtDate = (s) => { const [, m, d] = s.split("-"); return `${+m}/${+d}`; };
+
+  function renderPlanStrip() {
+    const el = byId("planbar");
+    if (!el) return;
+    const p = plan();
+    if (!p.deadline || !p.daysLeft) { el.style.display = "none"; return; }
+    const learned = p.total - p.unseen;
+    const doneToday = introducedToday();
+    const ok = doneToday >= p.target;
+    const pct = p.total ? Math.round((learned / p.total) * 100) : 0;
+    el.style.display = "flex";
+    el.innerHTML =
+      `<span class="pb"><span class="pb-k">倒计时</span><b>${p.daysLeft}</b> 天到 ${fmtDate(p.deadline)}</span>` +
+      `<span class="pb"><span class="pb-k">今日新词</span><b>${doneToday}</b>/${p.target}${ok ? " ✓" : ""}</span>` +
+      `<span class="pb"><span class="pb-k">总进度</span><b>${learned}</b>/${p.total}<i class="pb-bar"><i style="width:${pct}%"></i></i></span>`;
   }
 
   /* ---- study ---- */
+  function exHTML(e, opts = {}) {
+    return `<div class="sentence">${sentenceHTML(e, opts)}${e.n ? `<div class="exnote">${esc(e.n)}</div>` : ""}</div>`;
+  }
+
+  function trHTML(e) {
+    return e && e.t ? `<div class="ex-tr">${esc(e.t)}</div>` : "";
+  }
+
+  function openPreview() {
+    S.previewList = newInQueue();
+    S.showPreview = true;
+    render();
+    window.scrollTo(0, 0);
+  }
+
+  function renderPreview(main) {
+    const list = S.previewList;
+    const p = plan();
+    main.innerHTML = `
+      <div class="preview-head">
+        <div class="pv-title">今日新词 ${list.length} 个</div>
+        <div class="hint" style="text-align:left">先看一遍读音、释义、例句和句子翻译，再开始默记。</div>
+        ${p.daysLeft ? `<div class="hint" style="text-align:left">距 ${fmtDate(p.deadline)} 还有 <b>${p.daysLeft}</b> 天 · 每天需要 <b>${p.target}</b> 个新词</div>` : ""}
+        <button class="btn wide" id="startStudy" style="margin-top:10px">开始学习</button>
+      </div>
+      <div class="list" id="plist"></div>
+      <div class="hint" style="margin-top:14px">不想每次预习？在「设置」里关掉即可。</div>
+    `;
+    const frag = document.createDocumentFragment();
+    list.forEach((w, i) => {
+      const el = document.createElement("div");
+      el.className = "item pv-item";
+      el.innerHTML = `
+        <div class="item-head">
+          <span class="pv-n">${i + 1}</span>
+          <span class="item-word">${esc(w.w)}</span>
+          <span class="item-read">${esc(w.r || w.kh || "")}</span>
+          <span class="item-zh">${esc(w.z)}</span>
+        </div>
+        ${w.ex.slice(0, 2).map((e) => exHTML(e) + trHTML(e)).join("")}
+      `;
+      frag.appendChild(el);
+    });
+    byId("plist").appendChild(frag);
+    byId("startStudy").onclick = () => {
+      markPreviewed();
+      S.showPreview = false;
+      render();
+      window.scrollTo(0, 0);
+    };
+  }
+
   function renderStudy(main) {
+    if (S.showPreview) { renderPreview(main); return; }
     if (!S.queue.length) {
       main.innerHTML = `<div class="card"><div class="empty">
         <div class="big">🎉</div>
@@ -248,7 +377,9 @@
         <button class="btn" id="reload">刷新队列</button>
       </div>`;
       byId("moreNew").onclick = () => {
-        S.settings.newPerDay += 10; saveSettings(); rebuild(true);
+        S.settings.planByDeadline = false;
+        S.settings.newPerDay = effectiveNewPerDay() + 10;
+        saveSettings(); rebuild(true);
       };
       byId("reload").onclick = () => rebuild(true);
       return;
@@ -264,6 +395,7 @@
       ${isNew ? `<span class="badge new">新词</span>` : `<span class="badge due">复习</span>`}
       ${w.banks.map((b) => `<span class="badge">${esc(bankLabel(b))}</span>`).join("")}
       ${mode === "cloze" ? `<span class="badge">例句填空</span>` : mode === "zh2ja" ? `<span class="badge">中→日</span>` : `<span class="badge">日→中</span>`}
+      ${w.ex.length && newInQueue().length ? `<button class="badge pv-btn" id="pvBtn">先看一遍</button>` : ""}
     </div>`;
 
     let front = "", back = "";
@@ -281,9 +413,11 @@
       back = `<div class="word">${esc(w.w)}</div>${revealed}`;
     } else if (mode === "cloze") {
       front = `<div class="sentence">${sentenceHTML(w.ex[0], { blank: true })}</div>
+               ${w.ex[0].t ? `<div class="ex-tr">${esc(w.ex[0].t)}</div>` : ""}
                <div class="hint">补出这句里被挖掉的词</div>`;
       back = `<div class="word small">${esc(w.w)}</div>${revealed}
-              <div class="sentence">${sentenceHTML(w.ex[0])}</div>`;
+              <div class="sentence">${sentenceHTML(w.ex[0])}</div>
+              ${w.ex[0].t ? `<div class="ex-tr">${esc(w.ex[0].t)}</div>` : ""}`;
     } else {
       front = `<div class="word">${esc(w.w)}</div>${masked}`;
       back = `<div class="word small">${esc(w.w)}</div>${revealed}
@@ -293,9 +427,7 @@
     // examples live on the answer side; the cloze prompt already showed the first one
     const already = mode === "cloze" ? 1 : 0;
     const allEx = flipped
-      ? w.ex.slice(already, already + 2).map((e) =>
-          `<div class="sentence">${sentenceHTML(e)}${e.n ? `<div class="exnote">${esc(e.n)}</div>` : ""}</div>`
-        ).join("")
+      ? w.ex.slice(already, already + 2).map((e) => exHTML(e) + trHTML(e)).join("")
       : "";
 
     main.innerHTML = `
@@ -320,6 +452,7 @@
 
     const card = byId("card");
     card.onclick = () => { S.flipped = !S.flipped; render(); };
+    if (byId("pvBtn")) byId("pvBtn").onclick = (e) => { e.stopPropagation(); openPreview(); };
     if (byId("flip")) byId("flip").onclick = (e) => { e.stopPropagation(); S.flipped = true; render(); };
     document.querySelectorAll(".grade").forEach((b) => {
       b.onclick = (e) => { e.stopPropagation(); grade(+b.dataset.g); };
@@ -346,11 +479,14 @@
     else render();
   }
 
-  function rebuild(force) {
+  function rebuild(force, autoPreview) {
     S.queue = buildQueue();
     S.qi = 0;
     S.flipped = false;
     if (force) S.session = { new: 0, review: 0 };
+    S.previewList = newInQueue();
+    S.showPreview = !!(autoPreview && S.settings.preview && !previewedToday()
+                       && S.previewList.length);
     render();
   }
 
@@ -402,6 +538,7 @@
           <span class="item-zh">${esc(w.z)}</span>
         </div>
         ${w.ex[0] ? `<div class="item-ex">${sentenceHTML(w.ex[0])}</div>` : ""}
+        ${w.ex[0] && w.ex[0].t ? `<div class="item-tr">${esc(w.ex[0].t)}</div>` : ""}
         <div class="meter"><i style="width:${pct}%;background:${c ? "var(--ok)" : "var(--line)"}"></i></div>
       `;
       frag.appendChild(el);
@@ -467,6 +604,8 @@
         <div class="stat"><div class="k">总体进度</div><div class="v">${pct}<span class="u"> %</span></div></div>
       </div>
 
+      ${planPanel()}
+
       <div class="section-title">掌握程度</div>
       <div class="panel" style="padding:14px">
         <div class="bars">
@@ -517,18 +656,59 @@
     </div>`;
   }
 
+  function planPanel() {
+    const p = plan();
+    if (!p.deadline || !p.daysLeft) return "";
+    const learned = p.total - p.unseen;
+    const needPerDayLeft = p.target;
+    let eta = "还不够判断（先背几天）";
+    if (p.pace > 0) {
+      const days = Math.ceil(p.unseen / p.pace);
+      const d = new Date(startOfToday() + days * DAY);
+      eta = `${days} 天后 · ${d.getMonth() + 1}/${d.getDate()}`;
+    }
+    const off = p.etaDays && p.etaDays > p.daysLeft;
+    return `
+      <div class="section-title">完成期限</div>
+      <div class="panel" style="padding:14px">
+        <div class="field"><span class="fl">目标日期</span><span>${fmtDate(p.deadline)}（还有 ${p.daysLeft} 天）</span></div>
+        <div class="field"><span class="fl">每天需学新词</span><span>${needPerDayLeft} 个</span></div>
+        <div class="field"><span class="fl">已学 / 词库总量</span><span>${learned} / ${p.total}</span></div>
+        <div class="field"><span class="fl">按最近速度预计完成</span><span style="color:${off ? "var(--bad)" : "var(--ok)"}">${eta}</span></div>
+      </div>`;
+  }
+
   /* ---- settings ---- */
+  function deadlineHint() {
+    if (!S.settings.deadline) return "设定后会自动算出每天要背多少词";
+    const p = plan();
+    if (!p.daysLeft) return "期限已过";
+    return `距 ${fmtDate(S.settings.deadline)} 还有 ${p.daysLeft} 天 · 剩余 ${p.unseen} 个词 · 每天 ${p.target} 个`;
+  }
+
   function renderSettings(main) {
     const s = S.settings;
     main.innerHTML = `
       <div class="panel">
         <div class="field">
+          <div><div class="fl">按截止日期排计划</div><div class="fd">自动算出每天要学多少个新词</div></div>
+          <label class="sw"><input type="checkbox" id="planByDeadline" ${s.planByDeadline ? "checked" : ""}><span></span></label>
+        </div>
+        <div class="field">
+          <div><div class="fl">背完所有单词的期限</div><div class="fd">${deadlineHint()}</div></div>
+          <input type="date" id="deadline" value="${s.deadline || ""}">
+        </div>
+        <div class="field">
           <div><div class="fl">每日新词</div><div class="fd">每天最多引入多少个新词</div></div>
-          <input type="number" id="newPerDay" min="0" max="500" value="${s.newPerDay}">
+          <input type="number" id="newPerDay" min="0" max="500" value="${s.newPerDay}" ${s.planByDeadline ? "disabled" : ""}>
         </div>
         <div class="field">
           <div><div class="fl">每次复习上限</div><div class="fd">每轮最多排多少张待复习卡</div></div>
           <input type="number" id="maxReview" min="20" max="1000" value="${s.maxReview}">
+        </div>
+        <div class="field">
+          <div><div class="fl">学习前先预习</div><div class="fd">每天第一次学习前，先把今日新词看一遍</div></div>
+          <label class="sw"><input type="checkbox" id="preview" ${s.preview ? "checked" : ""}><span></span></label>
         </div>
         <div class="field">
           <div><div class="fl">卡片模式</div><div class="fd">混合模式会轮流出现三种题型</div></div>
@@ -588,10 +768,13 @@
     `;
 
     const bind = (id, fn) => { const el = byId(id); if (el) el.onchange = fn; };
-    bind("newPerDay", (e) => { s.newPerDay = Math.max(0, +e.target.value || 0); saveSettings(); rebuild(false); });
+    bind("planByDeadline", (e) => { s.planByDeadline = e.target.checked; saveSettings(); rebuild(false, false); });
+    bind("deadline", (e) => { s.deadline = e.target.value; saveSettings(); rebuild(false, false); });
+    bind("newPerDay", (e) => { s.newPerDay = Math.max(0, +e.target.value || 0); saveSettings(); rebuild(false, false); });
     bind("maxReview", (e) => { s.maxReview = Math.max(20, +e.target.value || 200); saveSettings(); });
     bind("cardMode", (e) => { s.cardMode = e.target.value; saveSettings(); });
     bind("showReading", (e) => { s.showReading = e.target.value; saveSettings(); render(); });
+    bind("preview", (e) => { s.preview = e.target.checked; saveSettings(); });
     main.querySelectorAll("[data-lvl]").forEach((cb) => cb.onchange = () => {
       const on = [...main.querySelectorAll("[data-lvl]")].filter((x) => x.checked).map((x) => x.dataset.lvl);
       s.levels = on.length ? on : ["N2"];
@@ -665,7 +848,7 @@
     }
     S.words.forEach((w) => S.byKey.set(keyOf(w), w));
     S.cards = replay(S.log);
-    rebuild(true);
+    rebuild(true, true);
 
     // keyboard shortcuts (desktop / iPad with keyboard)
     addEventListener("keydown", (e) => {

@@ -1,5 +1,5 @@
 /* Offline shell cache. Bump CACHE when app files change. */
-const CACHE = "jlpt-n2n3-v1";
+const CACHE = "jlpt-n2n3-v2";
 const ASSETS = [
   "./",
   "./index.html",
