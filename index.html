@@ -3,8 +3,10 @@
 <head>
 <meta charset="utf-8">
 <title>N2 / N3 考点单词</title>
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="theme-color" content="#1f2937">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f6f7f9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#14161a" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -27,7 +29,9 @@
     <div id="planbar" class="planbar"></div>
   </header>
 
-  <main id="main"></main>
+  <main id="main">
+    <div class="empty"><div class="hint">正在加载词库…</div></div>
+  </main>
 
   <nav class="tabbar">
     <button class="tab" data-view="study"><span class="ic">◎</span><span>学习</span></button>

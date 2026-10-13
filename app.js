@@ -47,7 +47,8 @@
     try { return JSON.parse(localStorage.getItem(K_LOG) || "[]"); } catch { return []; }
   }
   function saveLog() {
-    try { localStorage.setItem(K_LOG, JSON.stringify(S.log)); } catch (e) { toast("保存失败：存储空间不足"); }
+    try { localStorage.setItem(K_LOG, JSON.stringify(S.log)); }
+    catch { toast("保存失败：存储空间不足。请先在「设置」里导出进度备份，再清理不用的数据", { error: true }); }
   }
   function loadSettings() {
     try { return { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem(K_SET) || "{}") }; }
@@ -242,13 +243,28 @@
     return b ? b.title : id;
   };
 
-  function toast(msg) {
+  // one stable polite live region, mounted empty before any message lands in it
+  function toastRegion() {
     let el = document.querySelector(".toast");
-    if (!el) { el = document.createElement("div"); el.className = "toast"; document.body.appendChild(el); }
+    if (!el) {
+      el = document.createElement("div");
+      el.className = "toast";
+      el.setAttribute("role", "status");
+      el.setAttribute("aria-live", "polite");
+      el.onclick = () => el.classList.remove("on");
+      document.body.appendChild(el);
+    }
+    return el;
+  }
+
+  function toast(msg, opts = {}) {
+    const el = toastRegion();
     el.textContent = msg;
+    el.classList.toggle("err", !!opts.error);
     el.classList.add("on");
     clearTimeout(el._t);
-    el._t = setTimeout(() => el.classList.remove("on"), 1700);
+    // a message that reports a failure stays until it is tapped away
+    if (!opts.error) el._t = setTimeout(() => el.classList.remove("on"), 1700);
   }
 
   function cardMode(w) {
@@ -264,8 +280,12 @@
 
   /* ------------------------------------------------------------ views */
   function render() {
-    document.querySelectorAll(".tab").forEach((t) =>
-      t.classList.toggle("active", t.dataset.view === S.view));
+    document.querySelectorAll(".tab").forEach((t) => {
+      const on = t.dataset.view === S.view;
+      t.classList.toggle("active", on);
+      if (on) t.setAttribute("aria-current", "page");
+      else t.removeAttribute("aria-current");
+    });
     const titles = { study: "学习", browse: "词表", stats: "进度", settings: "设置" };
     byId("viewTitle").textContent = titles[S.view];
     renderTopStats();
@@ -317,7 +337,7 @@
 
   /* ---- study ---- */
   function exHTML(e, opts = {}) {
-    return `<div class="sentence">${sentenceHTML(e, opts)}${e.n ? `<div class="exnote">${esc(e.n)}</div>` : ""}</div>`;
+    return `<div class="sentence" lang="ja">${sentenceHTML(e, opts)}${e.n ? `<div class="exnote">${esc(e.n)}</div>` : ""}</div>`;
   }
 
   function trHTML(e) {
@@ -351,8 +371,8 @@
       el.innerHTML = `
         <div class="item-head">
           <span class="pv-n">${i + 1}</span>
-          <span class="item-word">${esc(w.w)}</span>
-          <span class="item-read">${esc(w.r || w.kh || "")}</span>
+          <span class="item-word" lang="ja">${esc(w.w)}</span>
+          <span class="item-read" lang="ja">${esc(w.r || w.kh || "")}</span>
           <span class="item-zh">${esc(w.z)}</span>
         </div>
         ${w.ex.slice(0, 2).map((e) => exHTML(e) + trHTML(e)).join("")}
@@ -377,8 +397,8 @@
         <div>本次学习 ${S.session.new + S.session.review} 张（新词 ${S.session.new}）</div>
       </div></div>
       <div class="row" style="margin-top:12px">
-        <button class="btn ghost" id="moreNew">再学 10 个新词</button>
-        <button class="btn" id="reload">刷新队列</button>
+        <button class="btn" id="moreNew">再学 10 个新词</button>
+        <button class="btn ghost" id="reload">刷新队列</button>
       </div>`;
       byId("moreNew").onclick = () => {
         S.settings.planByDeadline = false;
@@ -405,26 +425,26 @@
     let front = "", back = "";
     const showRead = S.settings.showReading;
     const readShown = showRead === "always" || (showRead === "after" && flipped);
-    const kh = w.kh ? `<div class="reading">${esc(w.kh)}</div>` : "";
+    const kh = w.kh ? `<div class="reading" lang="ja">${esc(w.kh)}</div>` : "";
     // the prompt side masks the reading unless the setting reveals it
     const masked = w.r
-      ? `<div class="reading${readShown ? "" : " hidden-reading"}">${readShown ? esc(w.r) : "读音 ?"}</div>`
+      ? `<div class="reading${readShown ? "" : " hidden-reading"}" lang="ja">${readShown ? esc(w.r) : "读音 ?"}</div>`
       : kh;
-    const revealed = w.r ? `<div class="reading">${esc(w.r)}</div>` : kh;
+    const revealed = w.r ? `<div class="reading" lang="ja">${esc(w.r)}</div>` : kh;
 
     if (mode === "zh2ja") {
       front = `<div class="meaning">${esc(w.z || "（无释义）")}</div>`;
-      back = `<div class="word">${esc(w.w)}</div>${revealed}`;
+      back = `<div class="word" lang="ja">${esc(w.w)}</div>${revealed}`;
     } else if (mode === "cloze") {
-      front = `<div class="sentence">${sentenceHTML(w.ex[0], { blank: true })}</div>
+      front = `<div class="sentence" lang="ja">${sentenceHTML(w.ex[0], { blank: true })}</div>
                ${w.ex[0].t ? `<div class="ex-tr">${esc(w.ex[0].t)}</div>` : ""}
                <div class="hint">补出这句里被挖掉的词</div>`;
-      back = `<div class="word small">${esc(w.w)}</div>${revealed}
-              <div class="sentence">${sentenceHTML(w.ex[0])}</div>
+      back = `<div class="word small" lang="ja">${esc(w.w)}</div>${revealed}
+              <div class="sentence" lang="ja">${sentenceHTML(w.ex[0])}</div>
               ${w.ex[0].t ? `<div class="ex-tr">${esc(w.ex[0].t)}</div>` : ""}`;
     } else {
-      front = `<div class="word">${esc(w.w)}</div>${masked}`;
-      back = `<div class="word small">${esc(w.w)}</div>${revealed}
+      front = `<div class="word" lang="ja">${esc(w.w)}</div>${masked}`;
+      back = `<div class="word small" lang="ja">${esc(w.w)}</div>${revealed}
               <div class="meaning">${esc(w.z || "（无释义）")}</div>`;
     }
 
@@ -455,7 +475,9 @@
     `;
 
     const card = byId("card");
-    card.onclick = () => { S.flipped = !S.flipped; render(); };
+    // tapping the card reveals the answer; it must not hide it again while the
+    // answer is being read
+    card.onclick = () => { if (S.flipped) return; S.flipped = true; render(); };
     if (byId("pvBtn")) byId("pvBtn").onclick = (e) => { e.stopPropagation(); openPreview(); };
     if (byId("flip")) byId("flip").onclick = (e) => { e.stopPropagation(); S.flipped = true; render(); };
     document.querySelectorAll(".grade").forEach((b) => {
@@ -509,9 +531,11 @@
         w.ex.some((e) => e.j.includes(q)));
     }
     const banks = S.manifest?.banks || [];
+    const cap = 200;
     main.innerHTML = `
       <div class="toolbar">
-        <input class="search" id="q" placeholder="搜索词 / 读音 / 中文 / 例句" value="${esc(f.q)}">
+        <input class="search" id="q" type="search" name="q" enterkeyhint="search"
+               aria-label="搜索词表" placeholder="搜索词 / 读音 / 中文 / 例句" value="${esc(f.q)}">
       </div>
       <div class="chips" style="margin-bottom:10px">
         <button class="chip ${!f.level ? "on" : ""}" data-lv="">全部级别</button>
@@ -519,7 +543,7 @@
         <button class="chip ${!f.bank ? "on" : ""}" data-bk="">全部词库</button>
         ${banks.map((b) => `<button class="chip ${f.bank === b.id ? "on" : ""}" data-bk="${b.id}">${esc(b.title)}</button>`).join("")}
       </div>
-      <div class="hint" style="text-align:left;margin-bottom:8px">共 ${list.length} 个词</div>
+      <div class="hint" style="text-align:left;margin-bottom:8px">共 ${list.length} 个词${list.length > cap ? `（只显示前 ${cap} 个，搜索可缩小范围）` : ""}</div>
       <div class="list" id="list"></div>
     `;
     const q = byId("q");
@@ -528,7 +552,6 @@
     main.querySelectorAll("[data-bk]").forEach((b) => b.onclick = () => { S.filter.bank = b.dataset.bk; renderBrowse(main); });
 
     const listEl = byId("list");
-    const cap = 200;
     const frag = document.createDocumentFragment();
     list.slice(0, cap).forEach((w) => {
       const c = S.cards.get(keyOf(w));
@@ -537,8 +560,8 @@
       const pct = c && c.ivl > 0 ? Math.min(100, Math.round((c.reps / 6) * 100)) : (c ? 8 : 0);
       el.innerHTML = `
         <div class="item-head">
-          <span class="item-word">${esc(w.w)}</span>
-          <span class="item-read">${esc(w.r)}</span>
+          <span class="item-word" lang="ja">${esc(w.w)}</span>
+          <span class="item-read" lang="ja">${esc(w.r)}</span>
           <span class="item-zh">${esc(w.z)}</span>
         </div>
         ${w.ex[0] ? `<div class="item-ex">${sentenceHTML(w.ex[0])}</div>` : ""}
@@ -551,7 +574,7 @@
     if (list.length > cap) {
       const more = document.createElement("div");
       more.className = "hint";
-      more.textContent = `只显示前 ${cap} 个，输入搜索词可缩小范围`;
+      more.textContent = `已到前 ${cap} 个的末尾，输入搜索词可找到更多`;
       listEl.appendChild(more);
     }
   }
@@ -616,7 +639,7 @@
           ${bar("已熟练", mature, total, "var(--ok)")}
           ${bar("复习中", young, total, "var(--accent)")}
           ${bar("学习中", learning, total, "var(--warn)")}
-          ${bar("未学习", unseen, total, "var(--line)")}
+          ${bar("未学习", unseen, total, "var(--text-dim)")}
         </div>
         <div class="hint" style="margin-top:12px;text-align:left">
           已熟练 = 间隔 ≥21 天 · 复习中 = 1–20 天 · 学习中 = 不到 1 天
@@ -627,12 +650,19 @@
       <div class="section-title">最近 14 天</div>
       <div class="panel" style="padding:14px">
         <div style="display:flex;align-items:flex-end;gap:3px;height:76px">
-          ${days.map((d) => `<div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;gap:2px" title="${d.n} 次">
+          ${days.map((d) => {
+            const dt = new Date(d.t);
+            const name = `${dt.getMonth() + 1}月${dt.getDate()}日：复习 ${d.n} 次，新学 ${d.newN} 个`;
+            return `<div role="img" aria-label="${name}" title="${name}" style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;gap:2px">
             <div style="height:${Math.round((d.n / maxN) * 62)}px;background:var(--accent);border-radius:3px 3px 0 0"></div>
             <div style="height:${Math.round((d.newN / maxN) * 62)}px;background:var(--accent-soft);border-radius:0 0 3px 3px"></div>
-          </div>`).join("")}
+          </div>`;
+          }).join("")}
         </div>
-        <div class="hint" style="margin-top:8px">深色=复习次数，浅色=新学单词</div>
+        <div style="display:flex;gap:3px;margin-top:4px" aria-hidden="true">
+          ${days.map((d, i) => `<div class="bday">${i % 2 === 0 ? new Date(d.t).getDate() : ""}</div>`).join("")}
+        </div>
+        <div class="hint" style="margin-top:8px">深色=复习次数，浅色=新学单词 · 每格一天，数字为日期</div>
       </div>
 
       <div class="section-title">各词库进度</div>
@@ -695,28 +725,28 @@
     main.innerHTML = `
       <div class="panel">
         <div class="field">
-          <div><div class="fl">按截止日期排计划</div><div class="fd">自动算出每天要学多少个新词</div></div>
-          <label class="sw"><input type="checkbox" id="planByDeadline" ${s.planByDeadline ? "checked" : ""}><span></span></label>
+          <div><label class="fl" for="planByDeadline">按截止日期排计划</label><div class="fd">自动算出每天要学多少个新词</div></div>
+          <label class="sw"><input type="checkbox" id="planByDeadline" name="planByDeadline" ${s.planByDeadline ? "checked" : ""}><span></span></label>
         </div>
         <div class="field">
-          <div><div class="fl">背完所有单词的期限</div><div class="fd">${deadlineHint()}</div></div>
-          <input type="date" id="deadline" value="${s.deadline || ""}">
+          <div><label class="fl" for="deadline">背完所有单词的期限</label><div class="fd">${deadlineHint()}</div></div>
+          <input type="date" id="deadline" name="deadline" value="${s.deadline || ""}">
         </div>
         <div class="field">
-          <div><div class="fl">每日新词</div><div class="fd">每天最多引入多少个新词</div></div>
-          <input type="number" id="newPerDay" min="0" max="500" value="${s.newPerDay}" ${s.planByDeadline ? "disabled" : ""}>
+          <div><label class="fl" for="newPerDay">每日新词</label><div class="fd">每天最多引入多少个新词</div></div>
+          <input type="number" id="newPerDay" name="newPerDay" inputmode="numeric" min="0" max="500" value="${s.newPerDay}" ${s.planByDeadline ? "disabled" : ""}>
         </div>
         <div class="field">
-          <div><div class="fl">每次复习上限</div><div class="fd">每轮最多排多少张待复习卡</div></div>
-          <input type="number" id="maxReview" min="20" max="1000" value="${s.maxReview}">
+          <div><label class="fl" for="maxReview">每次复习上限</label><div class="fd">每轮最多排多少张待复习卡</div></div>
+          <input type="number" id="maxReview" name="maxReview" inputmode="numeric" min="20" max="1000" value="${s.maxReview}">
         </div>
         <div class="field">
-          <div><div class="fl">学习前先预习</div><div class="fd">每天第一次学习前，先把今日新词看一遍</div></div>
-          <label class="sw"><input type="checkbox" id="preview" ${s.preview ? "checked" : ""}><span></span></label>
+          <div><label class="fl" for="preview">学习前先预习</label><div class="fd">每天第一次学习前，先把今日新词看一遍</div></div>
+          <label class="sw"><input type="checkbox" id="preview" name="preview" ${s.preview ? "checked" : ""}><span></span></label>
         </div>
         <div class="field">
-          <div><div class="fl">卡片模式</div><div class="fd">混合模式会轮流出现三种题型</div></div>
-          <select id="cardMode">
+          <div><label class="fl" for="cardMode">卡片模式</label><div class="fd">混合模式会轮流出现三种题型</div></div>
+          <select id="cardMode" name="cardMode">
             <option value="mix" ${s.cardMode === "mix" ? "selected" : ""}>混合</option>
             <option value="ja2zh" ${s.cardMode === "ja2zh" ? "selected" : ""}>日 → 中</option>
             <option value="zh2ja" ${s.cardMode === "zh2ja" ? "selected" : ""}>中 → 日</option>
@@ -724,8 +754,8 @@
           </select>
         </div>
         <div class="field">
-          <div><div class="fl">显示读音</div><div class="fd">日→中模式下何时显示假名</div></div>
-          <select id="showReading">
+          <div><label class="fl" for="showReading">显示读音</label><div class="fd">日→中模式下何时显示假名</div></div>
+          <select id="showReading" name="showReading">
             <option value="after" ${s.showReading === "after" ? "selected" : ""}>翻面后</option>
             <option value="always" ${s.showReading === "always" ? "selected" : ""}>总是</option>
             <option value="never" ${s.showReading === "never" ? "selected" : ""}>从不</option>
@@ -748,9 +778,9 @@
           <button class="btn ghost wide" id="export" style="margin-top:10px">导出进度文件</button>
         </div>
         <div class="field" style="display:block">
-          <div class="fl">导入</div>
+          <label class="fl" for="importFile">导入</label>
           <div class="fd">与当前记录<b>合并</b>（求并集，不会覆盖已有进度）</div>
-          <input type="file" id="importFile" accept="application/json,.json" style="margin-top:10px">
+          <input type="file" id="importFile" name="importFile" accept="application/json,.json" style="margin-top:10px">
         </div>
       </div>
 
@@ -819,7 +849,9 @@
           S.cards = replay(S.log);
           rebuild(false);
           toast(`合并完成，新增 ${added} 条记录`);
-        } catch (err) { toast("导入失败：" + err.message); }
+        } catch {
+          toast("导入失败：这个文件不是本站导出的进度文件。请选择「导出进度文件」生成的 JSON", { error: true });
+        }
       };
       r.readAsText(f);
     };
@@ -860,7 +892,7 @@
       if (e.target.tagName === "INPUT") return;
       if (e.key === " " || e.key === "Enter") {
         e.preventDefault();
-        if (S.queue[S.qi]) { S.flipped = !S.flipped; render(); }
+        if (S.queue[S.qi] && !S.flipped) { S.flipped = true; render(); }
       } else if (S.flipped && "1234".includes(e.key)) {
         grade(+e.key - 1);
       }
@@ -885,6 +917,7 @@
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("sw.js").catch(() => {});
     }
+    toastRegion();
     addEventListener("beforeunload", saveLog);
     document.addEventListener("visibilitychange", () => { if (document.hidden) saveLog(); });
   }

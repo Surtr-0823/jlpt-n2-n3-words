@@ -1,21 +1,28 @@
 :root {
+  color-scheme: light dark;
   --bg: #f6f7f9;
   --surface: #ffffff;
   --surface-2: #eef1f5;
   --text: #1a1d21;
-  --text-dim: #6b7280;
+  /* dim text reaches 4.52:1 on --surface-2 (was 4.27) and 5.12:1 on white */
+  --text-dim: #676e7c;
   --line: #e3e6ea;
-  --accent: #2f6df0;
+  /* --accent is the text/graphic role on the theme background;
+     --accent-fill is the surface that carries --on-accent white text */
+  --accent: #1c60ef;
+  --accent-fill: #2f6df0;
+  --on-accent: #ffffff;
   --accent-soft: #e6eeff;
-  --ok: #16a34a;
-  --warn: #d97706;
-  --bad: #dc2626;
+  --ok: #117d39;
+  --warn: #a55b05;
+  --bad: #d02222;
   --hl: #fff2c4;
   --hl-text: #7a4b00;
   --radius: 14px;
   --tap: 46px;
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-t: env(safe-area-inset-top, 0px);
+  --topbar-h: 8px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -26,7 +33,9 @@
     --text: #e9ecf0;
     --text-dim: #9aa3ae;
     --line: #31363d;
-    --accent: #5b8dff;
+    --accent: #6594ff;
+    --accent-fill: #3566d8;
+    --on-accent: #ffffff;
     --accent-soft: #22304d;
     --ok: #4ade80;
     --warn: #fbbf24;
@@ -43,10 +52,15 @@ html, body {
   height: 100%;
   background: var(--bg);
   color: var(--text);
-  font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
         "Hiragino Sans", "Noto Sans JP", "Microsoft YaHei", sans-serif;
+  font-size: 100%;
+  line-height: 1.5;
   overscroll-behavior-y: none;
 }
+
+/* Sizes are in rem so the reader's own text-size setting still enlarges text. */
+html { scroll-padding-top: calc(var(--safe-t) + 92px); }
 
 button, input, select { font: inherit; color: inherit; }
 button { cursor: pointer; touch-action: manipulation; border: none; background: none; }
@@ -76,10 +90,10 @@ button { cursor: pointer; touch-action: manipulation; border: none; background: 
   gap: 10px;
 }
 
-.topbar h1 { font-size: 17px; margin: 0; font-weight: 650; letter-spacing: .01em; }
+.topbar h1 { font-size: 1.0625rem; margin: 0; font-weight: 650; letter-spacing: .01em; }
 
 .top-stats {
-  font-size: 12.5px;
+  font-size: .78125rem;
   color: var(--text-dim);
   display: flex;
   gap: 10px;
@@ -104,7 +118,7 @@ button { cursor: pointer; touch-action: manipulation; border: none; background: 
   align-items: center;
   flex-wrap: wrap;
   padding: 6px 0 7px;
-  font-size: 11.5px;
+  font-size: .71875rem;
   color: var(--text-dim);
   border-bottom: 1px solid var(--line);
   margin: 0 -14px;
@@ -148,18 +162,38 @@ main {
 }
 
 .tab {
-  height: calc(var(--tap) + 6px);
+  position: relative;
+  min-height: calc(var(--tap) + 6px);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 1px;
-  font-size: 10.5px;
+  font-size: .65625rem;
   color: var(--text-dim);
 }
 
-.tab .ic { font-size: 17px; line-height: 1; }
-.tab.active { color: var(--accent); }
+.tab .ic { font-size: 1.0625rem; line-height: 1; }
+/* the current view is carried by weight and a bar, not colour alone */
+.tab.active { color: var(--accent); font-weight: 650; }
+.tab.active::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 26%;
+  right: 26%;
+  height: 2px;
+  border-radius: 0 0 2px 2px;
+  background: var(--accent);
+}
+
+.tab:focus-visible,
+.btn:focus-visible,
+.grade:focus-visible,
+.chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 
 /* ---------------------------------------------------------------- cards */
 .card {
@@ -171,18 +205,18 @@ main {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 18px 16px;
-  min-height: 320px;
-  animation: pop .18s ease;
+  /* never taller than the room a short viewport actually has, so the answer
+     and the rating row stay above the fold in landscape */
+  min-height: min(320px, 46dvh);
 }
-
-@keyframes pop { from { opacity: 0; transform: translateY(4px); } }
 
 .card.flipped { background: var(--surface); }
 
 .badges { display: flex; gap: 6px; flex-wrap: wrap; }
 
 .badge {
-  font-size: 11px;
+  font-size: .6875rem;
+  line-height: 1.5;
   padding: 2px 7px;
   border-radius: 999px;
   background: var(--surface-2);
@@ -209,32 +243,32 @@ main {
 }
 
 .word {
-  font-size: 44px;
+  font-size: 2.75rem;
   line-height: 1.2;
   font-weight: 600;
   letter-spacing: .02em;
 }
 
-.word.small { font-size: 30px; }
+.word.small { font-size: 1.875rem; }
 
 .reading {
-  font-size: 17px;
+  font-size: 1.0625rem;
   color: var(--accent);
   letter-spacing: .04em;
 }
 
-.reading.hidden-reading { color: var(--text-dim); font-size: 13px; }
+.reading.hidden-reading { color: var(--text-dim); font-size: .8125rem; }
 
 .meaning {
-  font-size: 26px;
+  font-size: 1.625rem;
   font-weight: 600;
   line-height: 1.35;
 }
 
-.meaning-sub { font-size: 15px; color: var(--text-dim); }
+.meaning-sub { font-size: .9375rem; color: var(--text-dim); }
 
 .sentence {
-  font-size: 17.5px;
+  font-size: 1.09375rem;
   line-height: 1.85;
   text-align: left;
   align-self: stretch;
@@ -255,14 +289,16 @@ main {
   color: var(--accent);
   font-weight: 700;
   letter-spacing: .08em;
+  /* the blank is one unbroken answer slot, never split across two lines */
+  white-space: nowrap;
 }
 
-.exnote { font-size: 13.5px; color: var(--text-dim); margin-top: 4px; }
+.exnote { font-size: .84375rem; color: var(--text-dim); margin-top: 4px; }
 .exnote::before { content: "≈ "; }
 
 /* machine-translated example sentence */
 .ex-tr {
-  font-size: 14px;
+  font-size: .875rem;
   line-height: 1.6;
   color: var(--text-dim);
   align-self: stretch;
@@ -273,11 +309,19 @@ main {
 }
 
 .badge.pv-btn {
+  position: relative;
   border: 1px solid var(--accent);
   background: var(--accent-soft);
   color: var(--accent);
   font-weight: 600;
   cursor: pointer;
+}
+
+/* the pill stays small but the finger target does not: 23px -> 45px tall */
+.badge.pv-btn::after {
+  content: "";
+  position: absolute;
+  inset: -11px -6px;
 }
 
 /* ---------------------------------------------------------------- preview */
@@ -289,7 +333,7 @@ main {
   margin-bottom: 10px;
 }
 
-.pv-title { font-size: 19px; font-weight: 700; margin-bottom: 6px; }
+.pv-title { font-size: 1.1875rem; font-weight: 700; margin-bottom: 6px; }
 
 .pv-item { border-left: 3px solid var(--accent-soft); }
 
@@ -300,14 +344,14 @@ main {
   border-radius: 50%;
   background: var(--surface-2);
   color: var(--text-dim);
-  font-size: 11px;
+  font-size: .6875rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   font-variant-numeric: tabular-nums;
 }
 
-.item-tr { font-size: 13.5px; color: var(--text-dim); margin-top: 3px; line-height: 1.55; }
+.item-tr { font-size: .84375rem; color: var(--text-dim); margin-top: 3px; line-height: 1.55; }
 
 /* switch */
 .sw { position: relative; display: inline-block; width: 46px; height: 28px; flex: none; }
@@ -331,11 +375,10 @@ main {
   box-shadow: 0 1px 3px rgba(0,0,0,.25);
   transition: transform .15s;
 }
-.sw input:checked + span { background: var(--accent); }
 .sw input:checked + span::after { transform: translateX(18px); }
 
 .hint {
-  font-size: 13px;
+  font-size: .8125rem;
   color: var(--text-dim);
   text-align: center;
 }
@@ -350,7 +393,8 @@ main {
 }
 
 .grade {
-  height: 58px;
+  min-height: 58px;
+  padding: 6px 4px;
   border-radius: 12px;
   background: var(--surface-2);
   display: flex;
@@ -358,12 +402,12 @@ main {
   align-items: center;
   justify-content: center;
   gap: 1px;
-  font-size: 13px;
+  font-size: .8125rem;
   font-weight: 600;
   border: 1px solid transparent;
 }
 
-.grade small { font-size: 10.5px; font-weight: 500; color: var(--text-dim); }
+.grade small { font-size: .65625rem; font-weight: 500; color: var(--text-dim); }
 .grade[data-g="0"] { color: var(--bad); }
 .grade[data-g="1"] { color: var(--warn); }
 .grade[data-g="2"] { color: var(--ok); }
@@ -371,10 +415,11 @@ main {
 .grade:active { transform: scale(.97); }
 
 .btn {
-  height: 50px;
+  min-height: 50px;
+  padding: 8px 14px;
   border-radius: 12px;
-  background: var(--accent);
-  color: #fff;
+  background: var(--accent-fill);
+  color: var(--on-accent);
   font-weight: 650;
   display: flex;
   align-items: center;
@@ -400,7 +445,7 @@ main {
   padding: 30px 10px;
 }
 
-.empty .big { font-size: 34px; }
+.empty .big { font-size: 2.125rem; }
 
 /* ---------------------------------------------------------------- lists */
 .list { display: flex; flex-direction: column; gap: 8px; }
@@ -414,30 +459,31 @@ main {
 
 .search {
   flex: 1;
-  height: 42px;
+  min-height: 42px;
   border-radius: 11px;
   border: 1px solid var(--line);
   background: var(--surface);
   padding: 0 12px;
-  outline: none;
+  /* 1rem keeps iOS Safari from zooming the page on focus */
+  font-size: 1rem;
 }
 
-.search:focus { border-color: var(--accent); }
+.search:focus-visible { border-color: var(--accent); }
 
 .chips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
 
 .chip {
   flex: none;
-  height: 32px;
+  min-height: 32px;
   padding: 0 12px;
   border-radius: 999px;
   background: var(--surface-2);
-  font-size: 13px;
+  font-size: .8125rem;
   color: var(--text-dim);
   white-space: nowrap;
 }
 
-.chip.on { background: var(--accent); color: #fff; font-weight: 600; }
+.chip.on { background: var(--accent-fill); color: var(--on-accent); font-weight: 600; }
 
 .item {
   background: var(--surface);
@@ -447,10 +493,10 @@ main {
 }
 
 .item-head { display: flex; align-items: baseline; gap: 8px; }
-.item-word { font-size: 19px; font-weight: 620; }
-.item-read { font-size: 13px; color: var(--accent); }
-.item-zh { font-size: 14px; color: var(--text-dim); margin-left: auto; text-align: right; }
-.item-ex { font-size: 14px; color: var(--text-dim); margin-top: 5px; line-height: 1.65; }
+.item-word { font-size: 1.1875rem; font-weight: 620; }
+.item-read { font-size: .8125rem; color: var(--accent); }
+.item-zh { font-size: .875rem; color: var(--text-dim); margin-left: auto; text-align: right; }
+.item-ex { font-size: .875rem; color: var(--text-dim); margin-top: 5px; line-height: 1.65; }
 
 .meter {
   height: 4px;
@@ -472,12 +518,12 @@ main {
   padding: 13px;
 }
 
-.stat .k { font-size: 12.5px; color: var(--text-dim); }
-.stat .v { font-size: 26px; font-weight: 680; margin-top: 2px; }
-.stat .u { font-size: 12px; color: var(--text-dim); }
+.stat .k { font-size: .78125rem; color: var(--text-dim); }
+.stat .v { font-size: 1.625rem; font-weight: 680; margin-top: 2px; }
+.stat .u { font-size: .75rem; color: var(--text-dim); }
 
 .section-title {
-  font-size: 13px;
+  font-size: .8125rem;
   color: var(--text-dim);
   font-weight: 600;
   margin: 18px 2px 8px;
@@ -486,11 +532,21 @@ main {
 
 .bars { display: flex; flex-direction: column; gap: 9px; }
 
-.brow { display: flex; align-items: center; gap: 9px; font-size: 13.5px; }
+.brow { display: flex; align-items: center; gap: 9px; font-size: .84375rem; }
 .brow .bl { width: 76px; flex: none; color: var(--text-dim); }
 .brow .bt { flex: 1; height: 9px; border-radius: 5px; background: var(--surface-2); overflow: hidden; }
 .brow .bt > i { display: block; height: 100%; }
 .brow .bn { width: 46px; text-align: right; flex: none; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+
+/* day-of-month ticks under the 14-day chart */
+.bday {
+  flex: 1;
+  text-align: center;
+  font-size: .6875rem;
+  line-height: 1.4;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
 
 /* ---------------------------------------------------------------- settings */
 .field {
@@ -503,18 +559,47 @@ main {
 }
 
 .field:last-child { border-bottom: none; }
-.field .fl { font-size: 15px; }
-.field .fd { font-size: 12.5px; color: var(--text-dim); margin-top: 2px; }
+.field .fl { font-size: .9375rem; }
+.field .fd { font-size: .78125rem; color: var(--text-dim); margin-top: 2px; }
 
-.field select, .field input[type="number"], .field input[type="text"] {
-  height: 38px;
+/* every control in a field row, so no platform default leaks through */
+.field select,
+.field input[type="number"],
+.field input[type="text"],
+.field input[type="date"],
+.field input[type="file"] {
+  min-height: 38px;
+  max-width: 100%;
   border-radius: 9px;
   border: 1px solid var(--line);
   background: var(--surface);
+  color: var(--text);
   padding: 0 10px;
   min-width: 96px;
   text-align: right;
+  /* 1rem keeps iOS Safari from zooming the page on focus */
+  font-size: 1rem;
 }
+
+.field input[type="date"] { text-align: left; }
+.field input[type="file"] {
+  min-width: 0;
+  padding: 4px 6px;
+  text-align: left;
+  font-size: .875rem;
+}
+.field input[type="file"]::file-selector-button {
+  font: inherit;
+  margin-inline-end: 8px;
+  padding: 4px 10px;
+  border-radius: 7px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.sw input:checked + span { background: var(--accent-fill); }
 
 .panel {
   background: var(--surface);
@@ -530,7 +615,7 @@ main {
   transform: translateX(-50%) translateY(10px);
   background: #1f2937;
   color: #fff;
-  font-size: 13.5px;
+  font-size: .84375rem;
   padding: 9px 15px;
   border-radius: 999px;
   opacity: 0;
@@ -542,14 +627,29 @@ main {
 }
 
 .toast.on { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast.err {
+  pointer-events: auto;
+  cursor: pointer;
+  /* keeps the readable dark pill; the border marks severity, the words say why */
+  border: 1px solid var(--bad);
+  max-width: 92vw;
+}
 
-.swipe-hint { text-align: center; font-size: 12px; color: var(--text-dim); margin-top: 6px; }
+.swipe-hint { text-align: center; font-size: .75rem; color: var(--text-dim); margin-top: 6px; }
 
 /* desktop niceties */
 @media (min-width: 700px) {
   #app { max-width: 720px; margin: 0 auto; width: 100%; }
-  .tabbar { max-width: 720px; left: 50%; transform: translateX(-50%); border-radius: 14px 14px 0 0; border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
-  .word { font-size: 52px; }
+  /* left/right plus a max-width centres the bar on the app column; the old
+     left:50% + right:0 pair sized it to half the viewport */
+  .tabbar {
+    max-width: 720px;
+    margin-inline: auto;
+    border-radius: 14px 14px 0 0;
+    border-left: 1px solid var(--line);
+    border-right: 1px solid var(--line);
+  }
+  .word { font-size: 3.25rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {
