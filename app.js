@@ -40,15 +40,48 @@
     filter: { level: "", bank: "", q: "" },
     showPreview: false,
     previewList: [],
+    clozeTyped: "",      // 这一张挖空卡已经打进去的答案
+    clozeResult: null,   // { typed, correct } —— 判分结果
+    clozeError: false,   // 空着就点「对答案」
+    chartDay: null,      // 进度页选中的那一天
   };
 
   /* ------------------------------------------------------------ storage */
+  let lastWritten = null;
   function loadLog() {
-    try { return JSON.parse(localStorage.getItem(K_LOG) || "[]"); } catch { return []; }
+    try {
+      const raw = localStorage.getItem(K_LOG) || "[]";
+      lastWritten = raw;
+      return JSON.parse(raw);
+    } catch { lastWritten = null; return []; }
   }
+
+  const logSig = (ev) => ev[0] + ":" + ev[2] + ":" + ev[1];
+
+  // 手机上可能同时开着旧 PWA 实例与 Safari 标签、两边都在写同一个键。
+  // 保存前先看盘上的记录有没有被别人改过；改过就求并集再写，
+  // 免得用内存里的旧副本覆盖掉新记录。格式不变，仍是 [key, grade, ts]。
   function saveLog() {
-    try { localStorage.setItem(K_LOG, JSON.stringify(S.log)); }
-    catch { toast("保存失败：存储空间不足。请先在「设置」里导出进度备份，再清理不用的数据", { error: true }); }
+    try {
+      const raw = localStorage.getItem(K_LOG);
+      if (raw !== null && lastWritten !== null && raw !== lastWritten) {
+        const other = JSON.parse(raw);
+        if (Array.isArray(other)) {
+          const seen = new Set(other.map(logSig));
+          const extra = [];
+          for (const ev of S.log) if (!seen.has(logSig(ev))) { seen.add(logSig(ev)); extra.push(ev); }
+          if (extra.length) {
+            S.log = other.concat(extra).sort((a, b) => a[2] - b[2]);
+            S.cards = replay(S.log);
+          }
+        }
+      }
+      const out = JSON.stringify(S.log);
+      localStorage.setItem(K_LOG, out);
+      lastWritten = out;
+    } catch {
+      toast("保存失败：存储空间不足。请先在「设置」里导出进度备份，再清理不用的数据", { error: true });
+    }
   }
   function loadSettings() {
     try { return { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem(K_SET) || "{}") }; }
@@ -278,6 +311,34 @@
     return "ja2zh";
   }
 
+  /* ------------------------------------------------------------ cloze scoring */
+  // 判分：空白、常用标点、大小写差异都不算错；汉字与假名两种写法都接受
+  // （例句里挖掉的那段有时是假名，有时是汉字，词条本身也可能只写其中一种）
+  const normAnswer = (s) => String(s || "")
+    .replace(/[\s\u3000]/g, "")
+    .replace(/[・、。，,．.！!？?「」『』（）()〜～]/g, "")
+    .toLowerCase();
+
+  function submitCloze(w) {
+    const typed = (S.clozeTyped || "").trim();
+    if (!typed) {
+      S.clozeError = true;
+      render();
+      const el = byId("clozeIn");
+      if (el) el.focus();
+      return;
+    }
+    const ex = w.ex[0];
+    const blanked = ex.j.slice(ex.h[0], ex.h[1]);
+    const accepted = [blanked, w.w, w.r, w.kh].filter(Boolean).map(normAnswer);
+    S.clozeResult = { typed, correct: accepted.includes(normAnswer(typed)) };
+    S.clozeError = false;
+    S.flipped = true;
+    render();
+    const v = document.querySelector(".verdict");
+    if (v) v.focus();
+  }
+
   /* ------------------------------------------------------------ views */
   function render() {
     document.querySelectorAll(".tab").forEach((t) => {
@@ -436,12 +497,28 @@
       front = `<div class="meaning">${esc(w.z || "（无释义）")}</div>`;
       back = `<div class="word" lang="ja">${esc(w.w)}</div>${revealed}`;
     } else if (mode === "cloze") {
-      front = `<div class="sentence" lang="ja">${sentenceHTML(w.ex[0], { blank: true })}</div>
-               ${w.ex[0].t ? `<div class="ex-tr">${esc(w.ex[0].t)}</div>` : ""}
-               <div class="hint">补出这句里被挖掉的词</div>`;
-      back = `<div class="word small" lang="ja">${esc(w.w)}</div>${revealed}
-              <div class="sentence" lang="ja">${sentenceHTML(w.ex[0])}</div>
-              ${w.ex[0].t ? `<div class="ex-tr">${esc(w.ex[0].t)}</div>` : ""}`;
+      const ex0 = w.ex[0];
+      front = `<div class="sentence" lang="ja">${sentenceHTML(ex0, { blank: true })}</div>
+               ${ex0.t ? `<div class="ex-tr">${esc(ex0.t)}</div>` : ""}
+               <form class="cloze-form" id="clozeForm" novalidate>
+                 <input class="cloze-in" id="clozeIn" type="text" lang="ja" value="${esc(S.clozeTyped)}"
+                        autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+                        enterkeyhint="done" aria-label="填空答案" placeholder="写出被挖掉的词">
+                 <button class="btn cloze-go" type="submit">对答案</button>
+               </form>
+               <div class="hint">${S.clozeError ? "先写下你的答案，再对答案" : "补出这句里被挖掉的词"}</div>`;
+      const blanked = ex0.j.slice(ex0.h[0], ex0.h[1]);
+      const readTxt = w.r && w.r !== blanked ? `（${esc(w.r)}）` : "";
+      const verdict = S.clozeResult
+        ? `<div class="verdict ${S.clozeResult.correct ? "ok" : "miss"}" role="status" tabindex="-1">${
+            S.clozeResult.correct
+              ? `答对了 · 你写的是「${esc(S.clozeResult.typed)}」`
+              : `答错了 · 你写的是「${esc(S.clozeResult.typed)}」· 正确答案「${esc(blanked)}」${readTxt}`
+          }</div>`
+        : "";
+      back = `${verdict}<div class="word small" lang="ja">${esc(w.w)}</div>${revealed}
+              <div class="sentence" lang="ja">${sentenceHTML(ex0)}</div>
+              ${ex0.t ? `<div class="ex-tr">${esc(ex0.t)}</div>` : ""}`;
     } else {
       front = `<div class="word" lang="ja">${esc(w.w)}</div>${masked}`;
       back = `<div class="word small" lang="ja">${esc(w.w)}</div>${revealed}
@@ -476,8 +553,16 @@
 
     const card = byId("card");
     // tapping the card reveals the answer; it must not hide it again while the
-    // answer is being read
-    card.onclick = () => { if (S.flipped) return; S.flipped = true; render(); };
+    // answer is being read, and typing in the cloze field must never flip the card
+    card.onclick = (e) => {
+      if (S.flipped) return;
+      if (e.target && e.target.closest && e.target.closest(".cloze-form")) return;
+      S.flipped = true; render();
+    };
+    const clozeIn = byId("clozeIn");
+    if (clozeIn) clozeIn.oninput = () => { S.clozeTyped = clozeIn.value; };
+    const clozeForm = byId("clozeForm");
+    if (clozeForm) clozeForm.onsubmit = (e) => { e.preventDefault(); submitCloze(w); };
     if (byId("pvBtn")) byId("pvBtn").onclick = (e) => { e.stopPropagation(); openPreview(); };
     if (byId("flip")) byId("flip").onclick = (e) => { e.stopPropagation(); S.flipped = true; render(); };
     document.querySelectorAll(".grade").forEach((b) => {
@@ -499,6 +584,7 @@
     if (wasNew) S.session.new++; else S.session.review++;
 
     S.flipped = false;
+    S.clozeTyped = ""; S.clozeResult = null; S.clozeError = false;
     S.qi++;
     requeueSoon(w, ts);
     if (S.qi >= S.queue.length) rebuild(false);
@@ -509,6 +595,7 @@
     S.queue = buildQueue();
     S.qi = 0;
     S.flipped = false;
+    S.clozeTyped = ""; S.clozeResult = null; S.clozeError = false;
     if (force) S.session = { new: 0, review: 0 };
     S.previewList = newInQueue();
     S.showPreview = !!(autoPreview && S.settings.preview && !previewedToday()
@@ -649,20 +736,26 @@
 
       <div class="section-title">最近 14 天</div>
       <div class="panel" style="padding:14px">
-        <div style="display:flex;align-items:flex-end;gap:3px;height:76px">
-          ${days.map((d) => {
+        <div style="display:flex;align-items:stretch;gap:3px;height:76px">
+          ${days.map((d, i) => {
             const dt = new Date(d.t);
             const name = `${dt.getMonth() + 1}月${dt.getDate()}日：复习 ${d.n} 次，新学 ${d.newN} 个`;
-            return `<div role="img" aria-label="${name}" title="${name}" style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;gap:2px">
-            <div style="height:${Math.round((d.n / maxN) * 62)}px;background:var(--accent);border-radius:3px 3px 0 0"></div>
-            <div style="height:${Math.round((d.newN / maxN) * 62)}px;background:var(--accent-soft);border-radius:0 0 3px 3px"></div>
-          </div>`;
+            return `<button type="button" class="bcol${S.chartDay === i ? " on" : ""}" data-day="${i}"
+            aria-label="${name}" aria-pressed="${S.chartDay === i ? "true" : "false"}">
+            <span style="height:${Math.round((d.n / maxN) * 62)}px;background:var(--accent);border-radius:3px 3px 0 0"></span>
+            <span style="height:${Math.round((d.newN / maxN) * 62)}px;background:var(--accent-soft);border-radius:0 0 3px 3px"></span>
+          </button>`;
           }).join("")}
         </div>
         <div style="display:flex;gap:3px;margin-top:4px" aria-hidden="true">
           ${days.map((d, i) => `<div class="bday">${i % 2 === 0 ? new Date(d.t).getDate() : ""}</div>`).join("")}
         </div>
-        <div class="hint" style="margin-top:8px">深色=复习次数，浅色=新学单词 · 每格一天，数字为日期</div>
+        <div class="chart-detail" role="status">${(() => {
+          if (S.chartDay === null || !days[S.chartDay]) return "点柱子看当天数值";
+          const d = days[S.chartDay], dt = new Date(d.t);
+          return `${dt.getMonth() + 1}月${dt.getDate()}日 · 复习 ${d.n} 次 · 新学 ${d.newN} 个`;
+        })()}</div>
+        <div class="hint" style="margin-top:6px">深色=复习次数，浅色=新学单词 · 每格一天，数字为日期</div>
       </div>
 
       <div class="section-title">各词库进度</div>
@@ -679,6 +772,22 @@
         <div class="field"><span class="fl">词库总量</span><span>${S.words.length}</span></div>
       </div>
     `;
+
+    // 点柱子只更新选中态与那行文字：不动整个视图，读屏的实时区域才稳定
+    const detail = main.querySelector(".chart-detail");
+    main.querySelectorAll(".bcol").forEach((b) => {
+      b.onclick = () => {
+        const i = +b.dataset.day;
+        S.chartDay = i;
+        main.querySelectorAll(".bcol").forEach((x) => {
+          const on = +x.dataset.day === i;
+          x.classList.toggle("on", on);
+          x.setAttribute("aria-pressed", on ? "true" : "false");
+        });
+        const d = days[i], dt = new Date(d.t);
+        if (detail) detail.textContent = `${dt.getMonth() + 1}月${dt.getDate()}日 · 复习 ${d.n} 次 · 新学 ${d.newN} 个`;
+      };
+    });
   }
 
   function bar(label, n, total, color, wide) {
@@ -834,11 +943,11 @@
           const obj = JSON.parse(r.result);
           const incoming = Array.isArray(obj) ? obj : obj.log;
           if (!Array.isArray(incoming)) throw new Error("格式不对");
-          const seen = new Set(S.log.map((x) => x[0] + ":" + x[2] + ":" + x[1]));
+          const seen = new Set(S.log.map(logSig));
           let added = 0;
           for (const ev of incoming) {
             if (!Array.isArray(ev) || ev.length < 3) continue;
-            const sig = ev[0] + ":" + ev[2] + ":" + ev[1];
+            const sig = logSig(ev);
             if (seen.has(sig)) continue;
             S.log.push([ev[0], ev[1], ev[2]]);
             seen.add(sig);

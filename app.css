@@ -7,6 +7,8 @@
   /* dim text reaches 4.52:1 on --surface-2 (was 4.27) and 5.12:1 on white */
   --text-dim: #676e7c;
   --line: #e3e6ea;
+  /* 控件边界单独一档：1.4.11 要求 ≥3:1；分隔线继续用上面那档浅色 */
+  --line-strong: #7f8c9f;
   /* --accent is the text/graphic role on the theme background;
      --accent-fill is the surface that carries --on-accent white text */
   --accent: #1c60ef;
@@ -33,6 +35,7 @@
     --text: #e9ecf0;
     --text-dim: #9aa3ae;
     --line: #31363d;
+    --line-strong: #6a7584;
     --accent: #6594ff;
     --accent-fill: #3566d8;
     --on-accent: #ffffff;
@@ -296,6 +299,46 @@ main {
 .exnote { font-size: .84375rem; color: var(--text-dim); margin-top: 4px; }
 .exnote::before { content: "≈ "; }
 
+/* ---------------------------------------------------------------- cloze input */
+.cloze-form {
+  display: flex;
+  gap: 8px;
+  align-self: stretch;
+  align-items: stretch;
+}
+
+.cloze-in {
+  flex: 1;
+  min-width: 0;
+  min-height: 50px;
+  border-radius: 12px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--text);
+  padding: 0 12px;
+  /* 1rem: iOS Safari 聚焦时不会放大整页 */
+  font-size: 1rem;
+  text-align: center;
+}
+
+.cloze-in:focus-visible { border-color: var(--accent); }
+.cloze-go { flex: none; padding-inline: 16px; }
+
+/* 判分反馈：文字说明，不靠颜色单独承载 */
+.verdict {
+  font-size: .875rem;
+  line-height: 1.5;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+}
+
+.verdict.ok { border-color: var(--ok); color: var(--ok); }
+.verdict.miss { border-color: var(--warn); color: var(--warn); }
+.verdict:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 /* machine-translated example sentence */
 .ex-tr {
   font-size: .875rem;
@@ -461,7 +504,7 @@ main {
   flex: 1;
   min-height: 42px;
   border-radius: 11px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   background: var(--surface);
   padding: 0 12px;
   /* 1rem keeps iOS Safari from zooming the page on focus */
@@ -538,6 +581,31 @@ main {
 .brow .bt > i { display: block; height: 100%; }
 .brow .bn { width: 46px; text-align: right; flex: none; color: var(--text-dim); font-variant-numeric: tabular-nums; }
 
+/* 14 天图：每根柱子是一个原生按钮，可点、可键盘操作 */
+.bcol {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-end;
+  gap: 2px;
+  padding: 0;
+  min-height: 76px;
+  background: none;
+  border-radius: 3px;
+}
+
+.bcol > span { display: block; width: 100%; }
+.bcol.on { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.chart-detail {
+  margin-top: 6px;
+  font-size: .8125rem;
+  color: var(--text-dim);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
 /* day-of-month ticks under the 14-day chart */
 .bday {
   flex: 1;
@@ -571,7 +639,7 @@ main {
   min-height: 38px;
   max-width: 100%;
   border-radius: 9px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   background: var(--surface);
   color: var(--text);
   padding: 0 10px;
@@ -581,7 +649,8 @@ main {
   font-size: 1rem;
 }
 
-.field input[type="date"] { text-align: left; }
+/* 日期控件要同时放下 2026/12/06 与浏览器自带的日历按钮 */
+.field input[type="date"] { text-align: left; min-width: 132px; padding-inline-end: 4px; }
 .field input[type="file"] {
   min-width: 0;
   padding: 4px 6px;
@@ -593,7 +662,7 @@ main {
   margin-inline-end: 8px;
   padding: 4px 10px;
   border-radius: 7px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   background: var(--surface-2);
   color: var(--text);
   cursor: pointer;
@@ -654,4 +723,15 @@ main {
 
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
+}
+
+/* 矮视口（手机横屏）：评分行吸底，读答案时不用先滚到屏幕下方 */
+@media (max-height: 520px) {
+  .grades {
+    position: sticky;
+    bottom: calc(var(--tap) + var(--safe-b) + 8px);
+    z-index: 5;
+    background: var(--bg);
+    padding-block: 6px;
+  }
 }
